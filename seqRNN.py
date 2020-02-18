@@ -9,6 +9,13 @@ import torch.nn as nn
 import numpy as np
 from torch.autograd import Variable
 
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Using GPU")
+else:
+    device = torch.device("cpu")
+    print("Using CPU")
+
 torch.manual_seed(777)
 
 # general specifications
@@ -45,7 +52,7 @@ def rnn_inputs_outputs(simparams):
             t = t+simparams["cueOn"]+simparams["cueOff"]
         in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
                       simparams["cueOn"]),i,simparams["numTargets"]] = 1; # for go signal    
-        inputs = Variable(torch.Tensor(in_data))
+        inputs = torch.from_numpy(in_data)
         # define output
         out_data = np.zeros([simparams["numTargets"],simparams["trialTime"]])
         t=simparams["instTime"]+simparams["RT"];
@@ -56,29 +63,31 @@ def rnn_inputs_outputs(simparams):
             out_data[int(seq_data[i,j]),t_out] = np.maximum(previous,target); 
             t = t+simparams["forceIPI"]
         
-        outputs = Variable(torch.Tensor(out_data))     
-    return inputs,outputs
+        outputs = torch.from_numpy(out_data)
+    return inputs, outputs
        
 def gaussian():
-    x = np.arange(-12.5, 12.5, 1);
-    s = 3;
-    y = 1./np.sqrt(2.*np.pi*s**2) * np.exp(-x**2/(2.* s**2))
+    x = np.arange(-12.5, 12.5, 1)
+    s = 3
+    y = 1./np.sqrt(2.*np.pi*s**2) * np.exp(-x**2/(2.*s**2))
     y = y/np.max(y)
     return y
 
 [inputs,labels] = rnn_inputs_outputs(simparams)
-
+inputs.to(device)
+labels.to(device)
 
 num_classes = 5
 input_size = inputs.shape[2]
+output_size = labels.shape[0]
 hidden_size = 100  # number of units
-batch_size = 1  
+batch_size = 1
 sequence_length = inputs.shape[0] 
 num_layers = 1  # one-layer rnn
 
 class RNN(nn.Module):
 
-    def __init__(self, num_classes, input_size, hidden_size, num_layers):
+    def __init__(self, num_classes, input_size, output_size, hidden_size, num_layers):
         super(RNN, self).__init__()
 
         self.num_classes = num_classes
@@ -88,39 +97,52 @@ class RNN(nn.Module):
         self.sequence_length = sequence_length
 
         #self.rnn = nn.RNN(input_size=5, hidden_size=5, batch_first=True)
-        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, batch_first=True)
-        self.h_0 = self.initialize_hidden(hidden_size)
+        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
+                          nonlinearity='tanh', batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
         # Initialize hidden and cell states
         # (num_layers * num_directions, batch, hidden_size) for batch_first=True
-        x = x.unsqueeze(0)
-        self.rnn.flatten_parameters()
-        out, self.h_0 = self.rnn(x, self.h_0)
-        out = self.linear(out)
-        out = self.sigmoid(out)
-        return out
+        hidden = self.initialize_hidden(batch_size)
+
+        out, hidden = self.rnn(x, hidden)
+
+        out = out.contiguous().view(-1, self.hidden_dim)
+        out = self.fc(out)
+
+        return out, hidden
     
-    def initialize_hidden(self, rnn_hidden_size):
+    def initialize_hidden(self, batch_size):
         # n_layers * n_directions, batch_size, rnn_hidden_size
-        return Variable(torch.randn(1,1,rnn_hidden_size),
-                        requires_grad=True)
+        hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size)
+        return hidden
 
 
 # Instantiate RNN model
-rnn = RNN(num_classes, input_size, hidden_size, num_layers)
+rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
+
 print(rnn)
+rnn.to(device)
 
 # Set loss and optimizer function
 # CrossEntropyLoss = LogSoftmax + NLLLoss
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(rnn.parameters(), lr=0.1)
+optimizer = torch.optim.Adam(rnn.parameters(), lr=0.01)
 
 # Train the model
-for epoch in range(100):
-    outputs = rnn(rnn)
+n_epochs = 100
+for epoch in range(n_epochs):
     optimizer.zero_grad()
+    [inputs, labels] = rnn_inputs_outputs(simparams)
+    inputs.to(device)
+    labels.to(device)
+    outputs, hidden = rnn(inputs)
     loss = criterion(outputs, labels)
     loss.backward()
     optimizer.step()
+
+    if epoch % 10 == 0:
+        print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
+        print("Loss: {:.4f}".format(loss.item()))
     
