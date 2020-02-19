@@ -18,7 +18,7 @@ else:
 
 torch.manual_seed(777)
 
-# general specifications
+# general specifications of simulations, trial structure
 simparams =	{
   "numTargets": 5,
   "minTarget": 1,
@@ -36,36 +36,36 @@ simparams.update({"instTime": (simparams["cueOn"]+simparams["cueOff"])*simparams
 simparams.update({"moveTime": (simparams["forceIPI"]*simparams["numTargets"])+simparams["forceWidth"]})
 simparams.update({"trialTime": simparams["instTime"]+simparams["RT"]+simparams["moveTime"]})
 
-# define inputs and outputs
+# define inputs and expected outputs
 def rnn_inputs_outputs(simparams):
     trial_n = simparams["numEpisodes"]
     seq_data = np.zeros([trial_n,simparams["numTargets"]])
+    in_data = np.zeros([simparams["trialTime"],simparams["numEpisodes"],simparams["numTargets"]+1])
+    out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
     y = gaussian()
     for i in range(trial_n):
-        seq_data[i,:] = np.random.randint(simparams["minTarget"],high=simparams["maxTarget"],size=[1,simparams["numTargets"]])
-        # define input stimulus presentation
-        in_data = np.zeros([simparams["trialTime"],simparams["numEpisodes"],simparams["numTargets"]+1])
+        seq_data = np.random.randint(simparams["minTarget"],high=simparams["maxTarget"],size=[1,simparams["numTargets"]])
         t=simparams["preTime"];
-        for j in range(simparams["numTargets"]):
+        for j in range(simparams["numTargets"]): # define targets
             t_inp = range(t,t+simparams["cueOn"])
-            in_data[t_inp,i,int(seq_data[i,j])] = 1;
+            in_data[t_inp,i,int(seq_data[0,j])] = 1;
             t = t+simparams["cueOn"]+simparams["cueOff"]
+        # go signal    
         in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
-                      simparams["cueOn"]),i,simparams["numTargets"]] = 1; # for go signal    
-        inputs = torch.from_numpy(in_data)
-        # define output
-        out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
+                      simparams["cueOn"]),i,simparams["numTargets"]] = 1;     
+        # define expected output
         t=simparams["instTime"]+simparams["RT"];
         for j in range(simparams["numTargets"]):
             t_out = range(t,t+simparams["forceWidth"])
-            previous = out_data[t_out,i,int(seq_data[i,j])]
+            previous = out_data[t_out,i,int(seq_data[0,j])]
             target = y;
-            out_data[t_out,i,int(seq_data[i,j])] = np.maximum(previous,target);
-            t = t+simparams["forceIPI"]
-        
-        outputs = torch.from_numpy(out_data)
+            out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target);
+            t = t+simparams["forceIPI"]  
+    inputs = torch.from_numpy(in_data)
+    outputs = torch.from_numpy(out_data)
     return inputs.float(), outputs.float()
        
+# convolve expected output force profile with a Gaussian window - for now hard-coded
 def gaussian():
     x = np.arange(-12.5, 12.5, 1)
     s = 3
@@ -77,6 +77,7 @@ def gaussian():
 inputs.to(device)
 labels.to(device)
 
+# here RNN specifications
 num_classes = 5
 input_size = inputs.shape[2]
 output_size = labels.shape[2]
@@ -107,7 +108,7 @@ class RNN(nn.Module):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
         out, hn = self.rnn(x, h0.detach())
         out = self.fc(out)
-        out = nn.functional.sigmoid(out)
+        out = torch.sigmoid(out)
         return out
 
 
