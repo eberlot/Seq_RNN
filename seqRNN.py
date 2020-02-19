@@ -97,9 +97,9 @@ class RNN(nn.Module):
         self.sequence_length = sequence_length
 
         #self.rnn = nn.RNN(input_size=5, hidden_size=5, batch_first=True)
-        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
+        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=True,
                           nonlinearity='tanh', batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc = nn.Linear(hidden_size, output_size, bias=True)
 
     def forward(self, x):
         # Initialize hidden state with zeros
