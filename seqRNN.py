@@ -22,7 +22,7 @@ simparams =	{
   "numTargets": 5,
   "minTarget": 1,
   "maxTarget": 5,
-  "numEpisodes": 50,
+  "numEpisodes": 30,
   "memPeriod": 10,
   "forceWidth": 25,
   "forceIPI": 10,
@@ -43,6 +43,7 @@ def rnn_inputs_targetoutputs(simparams):
     out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
     y = gaussian()
     for i in range(trial_n):
+        #seq_data[0,:] = [1,1,1,1,1]
         seq_data = np.random.randint(simparams["minTarget"],high=simparams["maxTarget"],size=[1,simparams["numTargets"]])
         t=simparams["preTime"];
         for j in range(simparams["numTargets"]): # define targets
@@ -53,7 +54,8 @@ def rnn_inputs_targetoutputs(simparams):
         in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
                       simparams["cueOn"]),i,simparams["numTargets"]] = 1;     
         # define expected output
-        t=simparams["instTime"]+simparams["RT"];
+        t=simparams["preTime"];
+        #t=simparams["instTime"]+simparams["RT"];
         for j in range(simparams["numTargets"]):
             t_out = range(t,t+simparams["forceWidth"])
             previous = out_data[t_out,i,int(seq_data[0,j])]
@@ -77,7 +79,7 @@ inputs.to(device)
 target_outputs.to(device)
 
 # here RNN specifications
-num_classes = 10
+num_classes = 5
 input_size = inputs.shape[2]
 output_size = target_outputs.shape[2]
 hidden_size = 300  # number of units
@@ -100,15 +102,15 @@ class RNN(nn.Module):
         self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
                           nonlinearity='tanh', batch_first=True)
         self.fc = nn.Linear(hidden_size, output_size)
-
+        nn.init.xavier_uniform_(self.fc.weight) # initialize weights
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
-        out, hn = self.rnn(x, h0.detach())
+        out, hidden = self.rnn(x, h0.detach())
         out = self.fc(out)
         out = torch.sigmoid(out)
-        return out
+        return out, hidden
 
 
 # Instantiate RNN model
@@ -117,29 +119,39 @@ print(rnn)
 rnn.to(device)
 
 # Set loss and optimizer function
-criterion = torch.nn.MSELoss()
+#criterion = torch.nn.MSELoss()
+criterion = torch.nn.BCEWithLogitsLoss()
 L2_penalty = 1e-5 # L2-type regularization on weights
-learning_rate = 1e-3
-optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
+learning_rate = 1e-2
+optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=0)
 
 # Train the model
-max_epochs = 1000000    # incorporate as a fail-safe
-loss_stop = 1e-10       # stopping criterion
-loss_step = 1           # initialized loss
+max_epochs = 50000     # maximum allowed number of iterations
+loss_stop = 0.01        # stopping criterion
+loss_iter = 1           # initialized loss
 epoch = 0
-while loss_step>loss_stop:
-    optimizer.zero_grad()
+while loss_iter>loss_stop and epoch<max_epochs:
     [inputs, labels] = rnn_inputs_targetoutputs(simparams)
     inputs.to(device)
     labels.to(device)
-    outputs = rnn(inputs)
+    # forward pass
+    outputs,_ = rnn(inputs)
+    # compute the loss
     loss = criterion(outputs, labels)
+    loss_iter = loss.detach().numpy()
+    # backpropagation
+    optimizer.zero_grad()
     loss.backward()
-    loss_step = loss.detach().numpy()
     optimizer.step()
+    #for param in rnn.parameters():
+     #   print(param.grad.data.sum())
     epoch +=1
     if epoch % 50 == 0:
         print('Epoch: {}........'.format(epoch), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
         
-#outputs.detach().numpy()    
+# visualize one training step
+#import matplotlib.pyplot as plt
+#plt.subplot(131), plt.plot(inputs[:,10,:]), plt.title('input'),\
+#plt.subplot(132), plt.plot(labels[:,10,:]),plt.title('target output'), \
+#plt.subplot(133), plt.plot(outputs.detach().numpy()[:,10,:]),plt.title('generated output')        
