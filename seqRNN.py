@@ -7,7 +7,6 @@ Created on Fri Feb  17 09:07:53 2020
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.autograd import Variable
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -18,12 +17,12 @@ else:
 
 torch.manual_seed(777)
 
-# general specifications of simulations, trial structure
+# general specifications of training simulations, trial structure
 simparams =	{
   "numTargets": 5,
   "minTarget": 1,
   "maxTarget": 5,
-  "numEpisodes": 10,
+  "numEpisodes": 50,
   "memPeriod": 10,
   "forceWidth": 25,
   "forceIPI": 10,
@@ -36,8 +35,8 @@ simparams.update({"instTime": (simparams["cueOn"]+simparams["cueOff"])*simparams
 simparams.update({"moveTime": (simparams["forceIPI"]*simparams["numTargets"])+simparams["forceWidth"]})
 simparams.update({"trialTime": simparams["instTime"]+simparams["RT"]+simparams["moveTime"]})
 
-# define inputs and expected outputs
-def rnn_inputs_outputs(simparams):
+# define inputs and target outputs 
+def rnn_inputs_targetoutputs(simparams):
     trial_n = simparams["numEpisodes"]
     seq_data = np.zeros([trial_n,simparams["numTargets"]])
     in_data = np.zeros([simparams["trialTime"],simparams["numEpisodes"],simparams["numTargets"]+1])
@@ -62,8 +61,8 @@ def rnn_inputs_outputs(simparams):
             out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target);
             t = t+simparams["forceIPI"]  
     inputs = torch.from_numpy(in_data)
-    outputs = torch.from_numpy(out_data)
-    return inputs.float(), outputs.float()
+    target_outputs = torch.from_numpy(out_data)
+    return inputs.float(), target_outputs.float()
        
 # convolve expected output force profile with a Gaussian window - for now hard-coded
 def gaussian():
@@ -73,15 +72,15 @@ def gaussian():
     y = y/np.max(y)
     return y
 
-[inputs,labels] = rnn_inputs_outputs(simparams)
+[inputs,target_outputs] = rnn_inputs_targetoutputs(simparams)
 inputs.to(device)
-labels.to(device)
+target_outputs.to(device)
 
 # here RNN specifications
-num_classes = 5
+num_classes = 10
 input_size = inputs.shape[2]
-output_size = labels.shape[2]
-hidden_size = 100  # number of units
+output_size = target_outputs.shape[2]
+hidden_size = 300  # number of units
 batch_size = simparams["numEpisodes"]
 sequence_length = inputs.shape[0] 
 num_layers = 1  # one-layer rnn
@@ -118,23 +117,29 @@ print(rnn)
 rnn.to(device)
 
 # Set loss and optimizer function
-# CrossEntropyLoss = LogSoftmax + NLLLoss
 criterion = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(rnn.parameters(), lr=0.01)
+L2_penalty = 1e-5 # L2-type regularization on weights
+learning_rate = 1e-3
+optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
 
 # Train the model
-n_epochs = 1000
-for epoch in range(n_epochs):
+max_epochs = 1000000    # incorporate as a fail-safe
+loss_stop = 1e-10       # stopping criterion
+loss_step = 1           # initialized loss
+epoch = 0
+while loss_step>loss_stop:
     optimizer.zero_grad()
-    [inputs, labels] = rnn_inputs_outputs(simparams)
+    [inputs, labels] = rnn_inputs_targetoutputs(simparams)
     inputs.to(device)
     labels.to(device)
     outputs = rnn(inputs)
     loss = criterion(outputs, labels)
     loss.backward()
+    loss_step = loss.detach().numpy()
     optimizer.step()
-
+    epoch +=1
     if epoch % 50 == 0:
-        print('Epoch: {}/{}........'.format(epoch, n_epochs), end=' ')
+        print('Epoch: {}........'.format(epoch), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
-    
+        
+#outputs.detach().numpy()    
