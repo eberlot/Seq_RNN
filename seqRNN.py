@@ -73,8 +73,8 @@ def gaussian():
     return y
 
 [inputs,target_outputs] = rnn_inputs_targetoutputs(simparams)
-inputs.to(device)
-target_outputs.to(device)
+inputs = inputs.to(device)
+target_outputs = target_outputs.to(device)
 
 # here RNN specifications
 num_classes = 10
@@ -104,7 +104,7 @@ class RNN(nn.Module):
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_().to(device)
         out, hn = self.rnn(x, h0.detach())
         out = self.fc(out)
         out = torch.sigmoid(out)
@@ -114,7 +114,7 @@ class RNN(nn.Module):
 # Instantiate RNN model
 rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
 print(rnn)
-rnn.to(device)
+rnn = rnn.to(device)
 
 # Set loss and optimizer function
 criterion = torch.nn.MSELoss()
@@ -130,11 +130,12 @@ epoch = 0
 while loss_step>loss_stop:
     optimizer.zero_grad()
     [inputs, labels] = rnn_inputs_targetoutputs(simparams)
-    inputs.to(device)
-    labels.to(device)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
     outputs = rnn(inputs)
     loss = criterion(outputs, labels)
     loss.backward()
+    loss = loss.cpu()
     loss_step = loss.detach().numpy()
     optimizer.step()
     epoch +=1
