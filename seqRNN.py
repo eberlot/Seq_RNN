@@ -107,7 +107,7 @@ class RNN(nn.Module):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
         out, hn = self.rnn(x, h0.detach())
         out = self.fc(out)
-        #out = nn.Sigmoid(out)
+        out = nn.functional.sigmoid(out)
         return out
 
 
@@ -122,7 +122,7 @@ criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(rnn.parameters(), lr=0.01)
 
 # Train the model
-n_epochs = 100
+n_epochs = 1000
 for epoch in range(n_epochs):
     optimizer.zero_grad()
     [inputs, labels] = rnn_inputs_outputs(simparams)
@@ -133,7 +133,7 @@ for epoch in range(n_epochs):
     loss.backward()
     optimizer.step()
 
-    if epoch % 10 == 0:
+    if epoch % 50 == 0:
         print('Epoch: {}/{}........'.format(epoch, n_epochs), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
     
