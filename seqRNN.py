@@ -23,7 +23,7 @@ simparams =	{
   "numTargets": 5,
   "minTarget": 1,
   "maxTarget": 5,
-  "numEpisodes": 1,
+  "numEpisodes": 10,
   "memPeriod": 10,
   "forceWidth": 25,
   "forceIPI": 10,
@@ -54,17 +54,17 @@ def rnn_inputs_outputs(simparams):
                       simparams["cueOn"]),i,simparams["numTargets"]] = 1; # for go signal    
         inputs = torch.from_numpy(in_data)
         # define output
-        out_data = np.zeros([simparams["numTargets"],simparams["trialTime"]])
+        out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
         t=simparams["instTime"]+simparams["RT"];
         for j in range(simparams["numTargets"]):
             t_out = range(t,t+simparams["forceWidth"])
-            previous = out_data[int(seq_data[i,j]),t_out]
+            previous = out_data[t_out,i,int(seq_data[i,j])]
             target = y;
-            out_data[int(seq_data[i,j]),t_out] = np.maximum(previous,target); 
+            out_data[t_out,i,int(seq_data[i,j])] = np.maximum(previous,target);
             t = t+simparams["forceIPI"]
         
         outputs = torch.from_numpy(out_data)
-    return inputs, outputs
+    return inputs.float(), outputs.float()
        
 def gaussian():
     x = np.arange(-12.5, 12.5, 1)
@@ -79,9 +79,9 @@ labels.to(device)
 
 num_classes = 5
 input_size = inputs.shape[2]
-output_size = labels.shape[0]
+output_size = labels.shape[2]
 hidden_size = 100  # number of units
-batch_size = 1
+batch_size = simparams["numEpisodes"]
 sequence_length = inputs.shape[0] 
 num_layers = 1  # one-layer rnn
 
@@ -102,32 +102,23 @@ class RNN(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        # Initialize hidden and cell states
-        # (num_layers * num_directions, batch, hidden_size) for batch_first=True
-        hidden = self.initialize_hidden(batch_size)
-
-        out, hidden = self.rnn(x, hidden)
-
-        out = out.contiguous().view(-1, self.hidden_dim)
+        # Initialize hidden state with zeros
+        # (layer_dim, batch_size, hidden_dim)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
+        out, hn = self.rnn(x, h0.detach())
         out = self.fc(out)
-
-        return out, hidden
-    
-    def initialize_hidden(self, batch_size):
-        # n_layers * n_directions, batch_size, rnn_hidden_size
-        hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        return hidden
+        #out = nn.Sigmoid(out)
+        return out
 
 
 # Instantiate RNN model
 rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
-
 print(rnn)
 rnn.to(device)
 
 # Set loss and optimizer function
 # CrossEntropyLoss = LogSoftmax + NLLLoss
-criterion = torch.nn.CrossEntropyLoss()
+criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(rnn.parameters(), lr=0.01)
 
 # Train the model
@@ -137,12 +128,12 @@ for epoch in range(n_epochs):
     [inputs, labels] = rnn_inputs_outputs(simparams)
     inputs.to(device)
     labels.to(device)
-    outputs, hidden = rnn(inputs)
+    outputs = rnn(inputs)
     loss = criterion(outputs, labels)
     loss.backward()
     optimizer.step()
 
     if epoch % 10 == 0:
-        print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
+        print('Epoch: {}/{}........'.format(epoch, n_epochs), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
     
