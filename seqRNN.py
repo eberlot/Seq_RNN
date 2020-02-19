@@ -104,8 +104,8 @@ class RNN(nn.Module):
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_().to(device)
-        out, hn = self.rnn(x, h0.detach())
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size, requires_grad=True).to(device)
+        out, hn = self.rnn(x, h0)
         out = self.fc(out)
         out = torch.sigmoid(out)
         return out
