@@ -75,8 +75,8 @@ def gaussian():
     return y
 
 [inputs,target_outputs] = rnn_inputs_targetoutputs(simparams)
-inputs.to(device)
-target_outputs.to(device)
+inputs = inputs.to(device)
+target_outputs = target_outputs.to(device)
 
 # here RNN specifications
 num_classes = 5
@@ -99,10 +99,9 @@ class RNN(nn.Module):
         self.sequence_length = sequence_length
 
         #self.rnn = nn.RNN(input_size=5, hidden_size=5, batch_first=True)
-        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
+        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=True,
                           nonlinearity='tanh', batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
-        nn.init.xavier_uniform_(self.fc.weight) # initialize weights
+
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
@@ -116,7 +115,7 @@ class RNN(nn.Module):
 # Instantiate RNN model
 rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
 print(rnn)
-rnn.to(device)
+rnn = rnn.to(device)
 
 # Set loss and optimizer function
 #criterion = torch.nn.MSELoss()
@@ -132,16 +131,27 @@ loss_iter = 1           # initialized loss
 epoch = 0
 while loss_iter>loss_stop and epoch<max_epochs:
     [inputs, labels] = rnn_inputs_targetoutputs(simparams)
+<<<<<<< HEAD
     inputs.to(device)
     labels.to(device)
     # forward pass
     outputs,_ = rnn(inputs)
     # compute the loss
+=======
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+    outputs = rnn(inputs)
+>>>>>>> origin/master
     loss = criterion(outputs, labels)
     loss_iter = loss.detach().numpy()
     # backpropagation
     optimizer.zero_grad()
     loss.backward()
+<<<<<<< HEAD
+=======
+    loss = loss.cpu()
+    loss_step = loss.detach().numpy()
+>>>>>>> origin/master
     optimizer.step()
     #for param in rnn.parameters():
      #   print(param.grad.data.sum())
