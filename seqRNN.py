@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Feb  17 09:07:53 2020
-@author: Eva
+@author: Eva + Jonathan
 """
 import torch
 import torch.nn as nn
@@ -31,7 +31,7 @@ simparams =	{
   "cueOn": 8,
   "cueOff": 2,
   "preTime": 10} # before visual cues
-simparams.update({"instTime": (simparams["cueOn"]+simparams["cueOff"])*simparams["numTargets"]+\
+simparams.update({"instTime": (simparams["cueOn"]+simparams["cueOff"])*simparams["numTargets"]+
   +simparams["cueOn"]+simparams["memPeriod"]})
 simparams.update({"moveTime": (simparams["forceIPI"]*simparams["numTargets"])+simparams["forceWidth"]})
 simparams.update({"trialTime": simparams["instTime"]+simparams["RT"]+simparams["moveTime"]})
@@ -49,19 +49,19 @@ def rnn_inputs_targetoutputs(simparams):
         t=simparams["preTime"];
         for j in range(simparams["numTargets"]): # define targets
             t_inp = range(t,t+simparams["cueOn"])
-            in_data[t_inp,i,int(seq_data[0,j])] = 1;
+            in_data[t_inp,i,int(seq_data[0,j])] = 1
             t = t+simparams["cueOn"]+simparams["cueOff"]
         # whether go or no-go trial
         if GoTrial[i]==1: # go trial
-            in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
-                      simparams["cueOn"]),i,simparams["numTargets"]] = 1; # go signal  
+            in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+
+                      simparams["cueOn"]),i,simparams["numTargets"]] = 1 # go signal
             # expected output
-            t=simparams["instTime"]+simparams["RT"];
+            t=simparams["instTime"]+simparams["RT"]
             for j in range(simparams["numTargets"]):
                 t_out = range(t,t+simparams["forceWidth"])
                 previous = out_data[t_out,i,int(seq_data[0,j])]
-                target = y;
-                out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target);
+                target = y
+                out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target)
                 t = t+simparams["forceIPI"]  
     inputs = torch.from_numpy(in_data)
     target_outputs = torch.from_numpy(out_data)
@@ -76,14 +76,14 @@ def gaussian():
     return y
 
 [inputs,target_outputs] = rnn_inputs_targetoutputs(simparams)
-inputs.to(device)
-target_outputs.to(device)
+inputs = inputs.to(device)
+target_outputs = target_outputs.to(device)
 
 # here RNN specifications
 num_classes = 5
 input_size = inputs.shape[2]
 output_size = target_outputs.shape[2]
-hidden_size = 300  # number of units
+hidden_size = 100  # number of units
 batch_size = simparams["numEpisodes"]
 sequence_length = inputs.shape[0] 
 num_layers = 1  # one-layer rnn
@@ -99,59 +99,75 @@ class RNN(nn.Module):
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
 
-        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
-                          nonlinearity='tanh', batch_first=True)
+        self.rnn = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=True,
+                          batch_first=False)
         self.fc = nn.Linear(hidden_size, output_size)
-        nn.init.xavier_uniform_(self.fc.weight) # initialize weights
+        #nn.init.xavier_uniform_(self.fc.weight) # initialize weights
+        self.h0 = torch.zeros([self.num_layers, self.hidden_size]).requires_grad_().to(device)
+        #torch.nn.init.normal_(self.rnn.weight_hh_l0, mean=0, std=1/np.sqrt(hidden_size)*1.1)
+        #torch.nn.init.normal_(self.rnn.weight_ih_l0, mean=0, std=1/np.sqrt(input_size))
+
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).requires_grad_()
-        out, hidden = self.rnn(x, h0.detach())
+        a = self.h0.repeat([1, batch_size, 1])
+        out, _ = self.rnn(x, self.h0.repeat([1, batch_size, 1]))
+        hidden_states = out
         out = self.fc(out)
-        out = torch.sigmoid(out)
-        return out, hidden
+        #out = torch.sigmoid(out)
+        return out, hidden_states
 
 
 # Instantiate RNN model
-rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
+rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers).to(device)
 print(rnn)
-rnn.to(device)
 
 # Set loss and optimizer function
 criterion = torch.nn.MSELoss()
 #criterion = torch.nn.BCEWithLogitsLoss()
-L2_penalty = 1e-5 # L2-type regularization on weights
+L2_penalty = 1e-6 # L2-type regularization on weights
 learning_rate = 1e-2
-optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=0)
+optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
 
 # Train the model
 max_epochs = 50000      # maximum allowed number of iterations
-loss_stop = 0.01        # stopping criterion
+loss_stop = 0.0001        # stopping criterion
 loss_iter = 1           # initialized loss
 epoch = 0
+loss_list = []
 while loss_iter>loss_stop and epoch<max_epochs:
+    optimizer.zero_grad()
     [inputs, labels] = rnn_inputs_targetoutputs(simparams)
-    inputs.to(device)
-    labels.to(device)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
     # forward pass
-    outputs,_ = rnn(inputs)
+    outputs, hidden = rnn(inputs)
     # compute the loss
     loss = criterion(outputs, labels)
-    loss_iter = loss.detach().numpy()
+    loss_iter = loss.cpu().detach().numpy()
+    loss_list.append(loss_iter)
     # backpropagation
-    optimizer.zero_grad()
     loss.backward()
     optimizer.step()
     #for param in rnn.parameters():
      #   print(param.grad.data.sum())
+
     epoch +=1
-    if epoch % 50 == 0:
+    if epoch % 100 == 0:
         print('Epoch: {}........'.format(epoch), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
-        
-# visualize one training step
-#import matplotlib.pyplot as plt
-#plt.subplot(131), plt.plot(inputs[:,10,:]), plt.title('input'),\
-#plt.subplot(132), plt.plot(labels[:,10,:]),plt.title('target output'), \
-#plt.subplot(133), plt.plot(outputs.detach().numpy()[:,10,:]),plt.title('generated output')         
+        inputs = inputs.cpu()
+        labels = labels.cpu()
+        outputs = outputs.cpu()
+        hidden = hidden.cpu()
+
+        # visualize one training step
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(2, 3)
+        plt.figure(figsize=(10, 2))
+        axs[0,0].plot(inputs[:,0,:]), axs[0,0].set_title('input')
+        axs[0,1].plot(labels[:,0,:]), axs[0,1].set_title('target output')
+        axs[0,2].plot(outputs.detach().numpy()[:,0,:]), axs[0,2].set_title('generated output')
+        axs[1,0].plot(hidden.detach().numpy()[:,0,:]), axs[1,0].set_title('hidden states')
+        axs[1,1].plot(loss_list), axs[1,1].set_title('MSE')
+        plt.show()
