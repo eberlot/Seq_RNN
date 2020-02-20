@@ -7,6 +7,7 @@ Created on Fri Feb  17 09:07:53 2020
 import torch
 import torch.nn as nn
 import numpy as np
+import random
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -22,7 +23,7 @@ simparams =	{
   "numTargets": 5,
   "minTarget": 1,
   "maxTarget": 5,
-  "numEpisodes": 30,
+  "numEpisodes": 40,
   "memPeriod": 10,
   "forceWidth": 25,
   "forceIPI": 10,
@@ -41,27 +42,27 @@ def rnn_inputs_targetoutputs(simparams):
     seq_data = np.zeros([trial_n,simparams["numTargets"]])
     in_data = np.zeros([simparams["trialTime"],simparams["numEpisodes"],simparams["numTargets"]+1])
     out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
+    GoTrial = random.choices([0,1],weights=[0.2,0.8],k=simparams["numEpisodes"])
     y = gaussian()
     for i in range(trial_n):
-        #seq_data[0,:] = [1,1,1,1,1]
         seq_data = np.random.randint(simparams["minTarget"],high=simparams["maxTarget"],size=[1,simparams["numTargets"]])
         t=simparams["preTime"];
         for j in range(simparams["numTargets"]): # define targets
             t_inp = range(t,t+simparams["cueOn"])
             in_data[t_inp,i,int(seq_data[0,j])] = 1;
             t = t+simparams["cueOn"]+simparams["cueOff"]
-        # go signal    
-        in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
-                      simparams["cueOn"]),i,simparams["numTargets"]] = 1;     
-        # define expected output
-        t=simparams["preTime"];
-        #t=simparams["instTime"]+simparams["RT"];
-        for j in range(simparams["numTargets"]):
-            t_out = range(t,t+simparams["forceWidth"])
-            previous = out_data[t_out,i,int(seq_data[0,j])]
-            target = y;
-            out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target);
-            t = t+simparams["forceIPI"]  
+        # whether go or no-go trial
+        if GoTrial[i]==1: # go trial
+            in_data[range(t+simparams["memPeriod"],t+simparams["memPeriod"]+\
+                      simparams["cueOn"]),i,simparams["numTargets"]] = 1; # go signal  
+            # expected output
+            t=simparams["instTime"]+simparams["RT"];
+            for j in range(simparams["numTargets"]):
+                t_out = range(t,t+simparams["forceWidth"])
+                previous = out_data[t_out,i,int(seq_data[0,j])]
+                target = y;
+                out_data[t_out,i,int(seq_data[0,j])] = np.maximum(previous,target);
+                t = t+simparams["forceIPI"]  
     inputs = torch.from_numpy(in_data)
     target_outputs = torch.from_numpy(out_data)
     return inputs.float(), target_outputs.float()
@@ -75,8 +76,8 @@ def gaussian():
     return y
 
 [inputs,target_outputs] = rnn_inputs_targetoutputs(simparams)
-inputs = inputs.to(device)
-target_outputs = target_outputs.to(device)
+inputs.to(device)
+target_outputs.to(device)
 
 # here RNN specifications
 num_classes = 5
@@ -98,10 +99,10 @@ class RNN(nn.Module):
         self.hidden_size = hidden_size
         self.sequence_length = sequence_length
 
-        #self.rnn = nn.RNN(input_size=5, hidden_size=5, batch_first=True)
-        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=True,
+        self.rnn = nn.RNN(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=False,
                           nonlinearity='tanh', batch_first=True)
-
+        self.fc = nn.Linear(hidden_size, output_size)
+        nn.init.xavier_uniform_(self.fc.weight) # initialize weights
     def forward(self, x):
         # Initialize hidden state with zeros
         # (layer_dim, batch_size, hidden_dim)
@@ -115,43 +116,32 @@ class RNN(nn.Module):
 # Instantiate RNN model
 rnn = RNN(num_classes, input_size, output_size, hidden_size, num_layers)
 print(rnn)
-rnn = rnn.to(device)
+rnn.to(device)
 
 # Set loss and optimizer function
-#criterion = torch.nn.MSELoss()
-criterion = torch.nn.BCEWithLogitsLoss()
+criterion = torch.nn.MSELoss()
+#criterion = torch.nn.BCEWithLogitsLoss()
 L2_penalty = 1e-5 # L2-type regularization on weights
 learning_rate = 1e-2
 optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=0)
 
 # Train the model
-max_epochs = 50000     # maximum allowed number of iterations
+max_epochs = 50000      # maximum allowed number of iterations
 loss_stop = 0.01        # stopping criterion
 loss_iter = 1           # initialized loss
 epoch = 0
 while loss_iter>loss_stop and epoch<max_epochs:
     [inputs, labels] = rnn_inputs_targetoutputs(simparams)
-<<<<<<< HEAD
     inputs.to(device)
     labels.to(device)
     # forward pass
     outputs,_ = rnn(inputs)
     # compute the loss
-=======
-    inputs = inputs.to(device)
-    labels = labels.to(device)
-    outputs = rnn(inputs)
->>>>>>> origin/master
     loss = criterion(outputs, labels)
     loss_iter = loss.detach().numpy()
     # backpropagation
     optimizer.zero_grad()
     loss.backward()
-<<<<<<< HEAD
-=======
-    loss = loss.cpu()
-    loss_step = loss.detach().numpy()
->>>>>>> origin/master
     optimizer.step()
     #for param in rnn.parameters():
      #   print(param.grad.data.sum())
@@ -164,4 +154,4 @@ while loss_iter>loss_stop and epoch<max_epochs:
 #import matplotlib.pyplot as plt
 #plt.subplot(131), plt.plot(inputs[:,10,:]), plt.title('input'),\
 #plt.subplot(132), plt.plot(labels[:,10,:]),plt.title('target output'), \
-#plt.subplot(133), plt.plot(outputs.detach().numpy()[:,10,:]),plt.title('generated output')        
+#plt.subplot(133), plt.plot(outputs.detach().numpy()[:,10,:]),plt.title('generated output')         
