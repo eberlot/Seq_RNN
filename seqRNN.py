@@ -83,7 +83,7 @@ target_outputs = target_outputs.to(device)
 num_classes = 5
 input_size = inputs.shape[2]
 output_size = target_outputs.shape[2]
-hidden_size = 100  # number of units
+hidden_size = 200  # number of units
 batch_size = simparams["numEpisodes"]
 sequence_length = inputs.shape[0] 
 num_layers = 1  # one-layer rnn
@@ -103,7 +103,7 @@ class RNN(nn.Module):
                           batch_first=False)
         self.fc = nn.Linear(hidden_size, output_size)
         #nn.init.xavier_uniform_(self.fc.weight) # initialize weights
-        self.h0 = torch.zeros([self.num_layers, self.hidden_size]).requires_grad_().to(device)
+        self.h0 = nn.Parameter(torch.zeros([self.num_layers, self.hidden_size]).requires_grad_().to(device))
         #torch.nn.init.normal_(self.rnn.weight_hh_l0, mean=0, std=1/np.sqrt(hidden_size)*1.1)
         #torch.nn.init.normal_(self.rnn.weight_ih_l0, mean=0, std=1/np.sqrt(input_size))
 
@@ -125,8 +125,8 @@ print(rnn)
 # Set loss and optimizer function
 criterion = torch.nn.MSELoss()
 #criterion = torch.nn.BCEWithLogitsLoss()
-L2_penalty = 1e-6 # L2-type regularization on weights
-learning_rate = 1e-2
+L2_penalty = 1e-6 # 1e-6 for GRU, 1e-4 for RNN
+learning_rate = 1e-2 # 1e-2 for GRU, 1e-4 for RNN
 optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
 
 # Train the model
@@ -153,7 +153,7 @@ while loss_iter>loss_stop and epoch<max_epochs:
      #   print(param.grad.data.sum())
 
     epoch +=1
-    if epoch % 100 == 0:
+    if epoch % 100 == 0 or loss_iter <= loss_stop:
         print('Epoch: {}........'.format(epoch), end=' ')
         print("Loss: {:.4f}".format(loss.item()))
         inputs = inputs.cpu()
