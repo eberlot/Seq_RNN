@@ -30,11 +30,20 @@ simparams =	{
   "RT": 12,
   "cueOn": 8,
   "cueOff": 2,
-  "preTime": 10} # before visual cues
+  "preTime": 10,
+  "GoTrial": 0.8} # before visual cues
 simparams.update({"instTime": (simparams["cueOn"]+simparams["cueOff"])*simparams["numTargets"]+
   +simparams["cueOn"]+simparams["memPeriod"]})
 simparams.update({"moveTime": (simparams["forceIPI"]*simparams["numTargets"])+simparams["forceWidth"]})
 simparams.update({"trialTime": simparams["instTime"]+simparams["RT"]+simparams["moveTime"]})
+
+# here specifications for training parameters
+trainparams = {
+        "maxIter": 50000,
+        "lossStop": 1e-4,
+        "plotOn": 1,
+        "L2": 1e-6,
+        "learningRate": 1e-2}
 
 # define inputs and target outputs 
 def rnn_inputs_targetoutputs(simparams):
@@ -42,7 +51,7 @@ def rnn_inputs_targetoutputs(simparams):
     seq_data = np.zeros([trial_n,simparams["numTargets"]])
     in_data = np.zeros([simparams["trialTime"],simparams["numEpisodes"],simparams["numTargets"]+1])
     out_data = np.zeros([simparams["trialTime"],trial_n,simparams["numTargets"]])
-    GoTrial = random.choices([0,1],weights=[0.2,0.8],k=simparams["numEpisodes"])
+    GoTrial = random.choices([0,1],weights=[1-simparams["GoTrial"],simparams["GoTrial"]],k=simparams["numEpisodes"])
     y = gaussian()
     for i in range(trial_n):
         seq_data = np.random.randint(simparams["minTarget"],high=simparams["maxTarget"],size=[1,simparams["numTargets"]])
@@ -101,9 +110,9 @@ class RNN(nn.Module):
 
         self.rnn = nn.GRU(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=True,
                           batch_first=False)
-        self.fc = nn.Linear(hidden_size, output_size, bias=True)
-        nn.init.zeros_(self.fc.bias)
-        #nn.init.xavier_uniform_(self.fc.weight) # initialize weights
+        self.fc = nn.Linear(hidden_size, output_size)
+        #self.fc = nn.Linear(hidden_size, output_size, bias=True)
+        #nn.init.zeros_(self.fc.bias)
         self.h0 = nn.Parameter(torch.zeros([self.num_layers, self.hidden_size]).requires_grad_().to(device))
         #torch.nn.init.normal_(self.rnn.weight_hh_l0, mean=0, std=1/np.sqrt(hidden_size)*1.1)
         #torch.nn.init.normal_(self.rnn.weight_ih_l0, mean=0, std=1/np.sqrt(input_size))
@@ -115,7 +124,7 @@ class RNN(nn.Module):
         out, _ = self.rnn(x, self.h0.repeat([1, batch_size, 1]))
         hidden_states = out
         out = self.fc(out)
-        out = torch.sigmoid(out)
+        #out = torch.sigmoid(out)
         return out, hidden_states
 
 
@@ -125,15 +134,14 @@ print(rnn)
 
 # Set loss and optimizer function
 criterion = torch.nn.MSELoss()
-#criterion = torch.nn.BCEWithLogitsLoss()
-L2_penalty = 1e-6 # 1e-6 for GRU, 1e-4 for RNN
-learning_rate = 1e-3 # 1e-3 for GRU, 1e-4 for RNN
+L2_penalty = trainparams["L2"] # 1e-6 for GRU, 1e-4 for RNN
+learning_rate = trainparams["learningRate"] # 1e-2 for GRU, 1e-4 for RNN
 optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
 
 # Train the model
-max_epochs = 50000      # maximum allowed number of iterations
-loss_stop = 0.0001        # stopping criterion
-loss_iter = 1           # initialized loss
+max_epochs = trainparams["maxIter"] # maximum allowed number of iterations
+loss_stop = trainparams["lossStop"] # stopping criterion
+loss_iter = 1                       # initialized loss
 epoch = 0
 loss_list = []
 while loss_iter>loss_stop and epoch<max_epochs:
@@ -150,9 +158,6 @@ while loss_iter>loss_stop and epoch<max_epochs:
     # backpropagation
     loss.backward()
     optimizer.step()
-    #for param in rnn.parameters():
-     #   print(param.grad.data.sum())
-
     epoch +=1
     if epoch % 100 == 0 or loss_iter <= loss_stop:
         print('Epoch: {}........'.format(epoch), end=' ')
@@ -161,14 +166,14 @@ while loss_iter>loss_stop and epoch<max_epochs:
         labels = labels.cpu()
         outputs = outputs.cpu()
         hidden = hidden.cpu()
-
-        # visualize one training step
-        import matplotlib.pyplot as plt
-        fig, axs = plt.subplots(2, 3)
-        plt.figure(figsize=(10, 2))
-        axs[0,0].plot(inputs[:,0,:]), axs[0,0].set_title('input')
-        axs[0,1].plot(labels[:,0,:]), axs[0,1].set_title('target output')
-        axs[0,2].plot(outputs.detach().numpy()[:,0,:]), axs[0,2].set_title('generated output')
-        axs[1,0].plot(hidden.detach().numpy()[:,0,:]), axs[1,0].set_title('hidden states')
-        axs[1,1].plot(loss_list), axs[1,1].set_title('MSE')
-        plt.show()
+        if trainparams["plotOn"]:
+            # visualize one training step
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(2, 3)
+            plt.figure(figsize=(10, 2))
+            axs[0,0].plot(inputs[:,0,:]), axs[0,0].set_title('input')
+            axs[0,1].plot(labels[:,0,:]), axs[0,1].set_title('target output')
+            axs[0,2].plot(outputs.detach().numpy()[:,0,:]), axs[0,2].set_title('generated output')
+            axs[1,0].plot(hidden.detach().numpy()[:,0,:]), axs[1,0].set_title('hidden states')
+            axs[1,1].plot(loss_list), axs[1,1].set_title('MSE')
+            plt.show()
