@@ -24,11 +24,11 @@ else:
 
 torch.manual_seed(777)
 
-baseDir = '/Users/Eva/Documents/Python/Seq_RNN'
+dataDir = '/Users/Eva/Documents/Data/Seq_RNN'
 # specifications for training parameters
 trainparams = {
-        "maxIter": 50000,
-        "lossStop": 5e-5,
+        "maxIter": 10000,
+        "lossStop": 1e-4,
         "plotOn": 1,
         "L2": 1e-6,
         "learningRate": 1e-2}
@@ -165,22 +165,13 @@ L2_penalty = trainparams["L2"] # 1e-6 for GRU, 1e-4 for RNN
 learning_rate = trainparams["learningRate"] # 1e-2 for GRU, 1e-4 for RNN
 optimizer = torch.optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=L2_penalty)
 
-# initiate stuff for training
+# initiate variables for training
 max_epochs = trainparams["maxIter"] # maximum allowed number of iterations
 loss_stop = trainparams["lossStop"] # stopping criterion
 loss_iter = 1                       # initialized loss
 epoch = 0
 loss_list = []
-# initiate stuff for test trials (repetitions)
 epoch_test = 0
-#seqdata_test = np.zeros([np.array(seqdata).shape[0],np.array(seqdata).shape[1],100000])  
-#size_input = inputs.cpu().detach().numpy().shape
-#inputs_test = np.zeros([size_input[0],len(seqdata),size_input[2],100000]) 
-#labels_test = np.zeros([size_input[0],len(seqdata),size_input[2]-1,100000])
-#outputs_rep1 = np.zeros([size_input[0],1,size_input[2]-1,100000])
-#outputs_rep2 = np.zeros([size_input[0],len(seqdata),size_input[2]-1,100000])
-#hidden_rep1 = np.zeros([size_input[0],1,hidden_size,100000])
-#hidden_rep2 = np.zeros([size_input[0],len(seqdata),hidden_size,100000])
 # Train the model
 while loss_iter>loss_stop and epoch<max_epochs:    
     if epoch % 50 !=0: # normal training
@@ -193,18 +184,10 @@ while loss_iter>loss_stop and epoch<max_epochs:
         loss.backward()
         optimizer.step()
         epoch +=1
-    else:    # test repetition
-        # every 50 steps do repetition test
+    else:    # every 50 steps do repetition test
         # first step for one stimulus
         seqdata,simparams = generate_seqdata_simparams("test_gonogo")
-        #seqdata_test[:,:,epoch_test] = np.array(seqdata)
         loss,outputs_1,hidden_1,labels,inputs = rnn_step(simparams,seqdata) # one step forward
-        #inputs_test[:,:,:,epoch_test] = inputs.cpu().detach().numpy()
-        #labels_test[:,:,:,epoch_test] = labels.cpu().detach().numpy()
-        #hidden_rep1[:,:,:,epoch_test] = hidden.cpu().detach().numpy()
-        #outputs_rep1[:,:,:,epoch_test] = outputs.cpu().detach().numpy()
-        #loss_iter = loss.cpu().detach().numpy()
-        #loss_list.append(loss_iter)
         loss.backward()
         optimizer.step()
         # record first trial
@@ -213,11 +196,10 @@ while loss_iter>loss_stop and epoch<max_epochs:
         seqdata,simparams = generate_seqdata_simparams("train_gonogo")
         simparams["numEpisodes"]=len(seqdata)
         loss,outputs_2,hidden_2,labels,inputs = rnn_step(simparams,seqdata) # second step forward
-        #outputs_rep2[:,:,:,epoch_test] = outputs.cpu().detach().numpy()
-        #hidden_rep2[:,:,:,epoch_test] = hidden.cpu().detach().numpy()   
         fileName = os.path.join(baseDir,'outputs','repetition_test_' + str(epoch_test) + '.p')
         # here save variables
-        pickle.dump(seqdata, open(fileName, "wb" ))
+        pickle.dump([seqdata,labels,inputs,outputs_1,hidden_1,outputs_2,hidden_2], open(fileName, "wb" ))
+        # later for opening: seqdata,labels,inputs,outputs_1,hidden_1,outputs_2,hidden_2 = pickle.load(open(fileName,"rb"))
         epoch_test +=1
     
     if epoch % 100 == 0 or loss_iter <= loss_stop:
