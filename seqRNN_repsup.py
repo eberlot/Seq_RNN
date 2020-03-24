@@ -13,8 +13,8 @@ import numpy as np
 import random
 import itertools
 import os
-import pickle
-
+#import pickle
+import scipy.io
 if torch.cuda.is_available():
     device = torch.device("cuda")
     print("Using GPU")
@@ -24,11 +24,11 @@ else:
 
 torch.manual_seed(777)
 
-dataDir = '/Users/Eva/Documents/Data/Seq_RNN'
+baseDir = '/Users/Eva/Documents/Data/Seq_RNN'
 # specifications for training parameters
 trainparams = {
-        "maxIter": 10000,
-        "lossStop": 1e-4,
+        "maxIter": 50000,
+        "lossStop": 5e-5,
         "plotOn": 1,
         "L2": 1e-6,
         "learningRate": 1e-2}
@@ -186,6 +186,7 @@ while loss_iter>loss_stop and epoch<max_epochs:
         epoch +=1
     else:    # every 50 steps do repetition test
         # first step for one stimulus
+        optimizer.zero_grad()
         seqdata,simparams = generate_seqdata_simparams("test_gonogo")
         loss,outputs_1,hidden_1,labels,inputs = rnn_step(simparams,seqdata) # one step forward
         loss.backward()
@@ -196,15 +197,26 @@ while loss_iter>loss_stop and epoch<max_epochs:
         seqdata,simparams = generate_seqdata_simparams("train_gonogo")
         simparams["numEpisodes"]=len(seqdata)
         loss,outputs_2,hidden_2,labels,inputs = rnn_step(simparams,seqdata) # second step forward
-        fileName = os.path.join(baseDir,'outputs','repetition_test_' + str(epoch_test) + '.p')
+        #fileName = os.path.join(baseDir,'outputs','repetition_test_' + str(epoch_test) + '.p')
+        fileName2 = os.path.join(baseDir,'outputs','repetition_test_' + str(epoch_test) + '.mat')
+        # here save
+        adict = {}
+        adict['seqdata'] = seqdata
+        adict['labels'] = labels.detach().numpy()
+        adict['inputs'] = inputs.detach().numpy()
+        adict['outputs_1'] = outputs_1.detach().numpy()
+        adict['outputs_2'] = outputs_2.detach().numpy()
+        adict['hidden_1'] = hidden_1.detach().numpy()
+        adict['hidden_2'] = hidden_2.detach().numpy()
+        scipy.io.savemat(fileName2, adict)
         # here save variables
-        pickle.dump([seqdata,labels,inputs,outputs_1,hidden_1,outputs_2,hidden_2], open(fileName, "wb" ))
+        #pickle.dump([seqdata,labels,inputs,outputs_1,hidden_1,outputs_2,hidden_2], open(fileName, "wb" ))
         # later for opening: seqdata,labels,inputs,outputs_1,hidden_1,outputs_2,hidden_2 = pickle.load(open(fileName,"rb"))
         epoch_test +=1
     
     if epoch % 100 == 0 or loss_iter <= loss_stop:
         print('Epoch: {}........'.format(epoch), end=' ')
-        print("Loss: {:.4f}".format(loss.item()))
+        print("Loss: {:.5f}".format(loss.item()))
         inputs = inputs.cpu()
         labels = labels.cpu()
         outputs = outputs.cpu()
