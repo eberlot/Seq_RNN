@@ -1,5 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
+import datetime
+import os
 
 
 def train(Network, trainparams, netparams, simparams, input_generator):
@@ -49,3 +51,17 @@ def train(Network, trainparams, netparams, simparams, input_generator):
                 axs[1, 1].plot(loss_list), axs[1, 1].set_title('MSE')
                 axs[1, 2].plot(labels[:, 0, :]-outputs.detach().numpy()[:, 0, :]), axs[1, 2].set_title('Prediction Error')
                 plt.show()
+
+    # Save the trained network
+    save_time = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M")
+    net_name = Network._get_name()
+    task_name = input_generator.__name__
+    if os.path.exists(trainparams['SaveDirectory']+'/RNN'):
+        PATH = trainparams['SaveDirectory'] + 'RNN/' + save_time + '_' + net_name + '_' + task_name + '_' + \
+               str(simparams['numTargetTrial']) + '.pth'
+        torch.save(Network.state_dict(), PATH)
+    else:
+        os.mkdir(trainparams['SaveDirectory']+'/RNN')
+        PATH = trainparams['SaveDirectory'] + 'RNN/' + save_time + '_' + net_name + '_' + task_name + '_' + \
+               str(simparams['numTargetTrial']) + '.pth'
+        torch.save(Network.state_dict(), PATH)
