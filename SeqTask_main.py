@@ -26,7 +26,7 @@ simparams = {
   "numTargets": 5,      # Number of possible targets (Pentadactyly)
   "minTarget": 0,
   "maxTarget": 5,
-  "numTargetTrial": 1,  # Number of targets per trial. [1 -> +0] [2 -> +1]  [3 -> +2]
+  "numTargetTrial": 1,  # Number of targets per trial.
   "numEpisodes": 40,    # Number of Episodes (Actually number of trials)
   "memPeriod": 10,      # Memory Period  (This will be variable in future)
   "forceWidth": 25,     # Width of force value
