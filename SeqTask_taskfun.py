@@ -28,28 +28,40 @@ def rnn_IO_gaussian(simparams):
     out_data = np.zeros([simparams["trialTime"], trial_n, simparams["numTargets"]])
     GoTrial = random.choices([0, 1], weights=[1-simparams["GoTrial"], simparams["GoTrial"]], k=simparams["numEpisodes"])
     y = gaussian()
+    # Zero matrices for task info
+    # inputs_history: A zero matrix for recording task's input timing
+    # NumEpisodes, NumTargets + 1 GoSignal, 3(label, start-time, end_time)
+    inputs_history = np.zeros((trial_n, simparams["numTargetTrial"]+1, 3))
+    inputs_history[:, -1, 0] = GoTrial
+    targets_history = np.zeros((trial_n, simparams["numTargetTrial"], 3))
     for i in range(trial_n):
         seq_data = np.random.randint(simparams["minTarget"], high=simparams["maxTarget"], size=[1, simparams["numTargetTrial"]])
+        inputs_history[i, :-1, 0] = seq_data  # Saving labels for the current finger sequence for the current trial
+        targets_history[i, :, 0] = seq_data
         t = simparams["preTime"]
         for j in range(simparams["numTargetTrial"]): # define targets
+            inputs_history[i, j, 1:] = [t, t+simparams["cueOn"]]   # Saving start and end time for each instruction
             t_inp = range(t, t+simparams["cueOn"])
             in_data[t_inp, i, int(seq_data[0, j])] = 1
             t = t + simparams["cueOn"]+simparams["cueOff"]
         # whether go or no-go trial
         if GoTrial[i] == 1:  # go trial
-            in_data[range(t+simparams["memPeriod"], t+simparams["memPeriod"]+
+            in_data[range(t+simparams["memPeriod"], t+simparams["memPeriod"] +
                       simparams["cueOn"]), i, simparams["numTargets"]] = 1  # go signal
+            # Saving GoCue signal interval
+            inputs_history[i, -1, 1:] = [t+simparams["memPeriod"], t+simparams["memPeriod"]+simparams["cueOn"]]
             # expected output
             t = simparams["instTime"]+simparams["RT"]
             for j in range(simparams["numTargetTrial"]):
                 t_out = range(t, t+simparams["forceWidth"])
+                targets_history[i, j, 1:] = [t, t+simparams["forceWidth"]]
                 previous = out_data[t_out, i, int(seq_data[0, j])]
                 target = y
                 out_data[t_out, i, int(seq_data[0, j])] = np.maximum(previous, target)
                 t = t + simparams["forceIPI"]
     inputs = torch.from_numpy(in_data)
     target_outputs = torch.from_numpy(out_data)
-    return inputs.float().to(simparams["device"]), target_outputs.float().to(simparams["device"])
+    return inputs.float().to(simparams["device"]), target_outputs.float().to(simparams["device"]), inputs_history, targets_history
 
 # convolve expected output force profile with a Gaussian window - for now hard-coded
 

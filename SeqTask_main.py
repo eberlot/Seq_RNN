@@ -8,6 +8,7 @@ import torch
 from SeqTask_taskfun import rnn_IO_gaussian, taskplot  # Loads the task function
 from SeqTask_network import simple_recurrent
 from SeqTask_train import train
+from SeqTask_validation import test
 
 # Check if GPU is available
 if torch.cuda.is_available():
@@ -40,7 +41,7 @@ simparams = {
 }
 
 # Create and plot a sample of simulated task
-rnn_input, rnn_target = rnn_IO_gaussian(simparams)
+rnn_input, rnn_target, _, _ = rnn_IO_gaussian(simparams)
 taskplot(rnn_input, rnn_target)
 
 # ++Define the Neural Network++
@@ -67,7 +68,19 @@ trainparams = {
         "plotOn": 1,           # Plot during the training process
         "L2": 0,               # L2 regularization
         "learningRate": 1e-2,  # 1e-2 for GRU, 1e-4 for RNN
-        "HiddenRegRate": 1e-6  # 1e-6 works fine for GRU
+        "HiddenRegRate": 1e-6,  # 1e-6 works fine for GRU
+        "SaveDirectory": '.'
 }
 
 train(rnn, trainparams, netparams, simparams, input_generator=rnn_IO_gaussian)
+
+
+testparams = {
+        "numTrial": 10,                                 # Number of times that Task function is called
+        "plotOn": 0,                                    # Plot during the training process
+        "LoadDirectory": trainparams['SaveDirectory'],  # Where can it find the saved network
+        "LoadFileName": '/RNN/27_08_2020_21_32_simple_recurrent_rnn_IO_gaussian_1.pth'
+}
+
+test(rnn, testparams, netparams, simparams, input_generator=rnn_IO_gaussian)
+

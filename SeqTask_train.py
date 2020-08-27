@@ -20,7 +20,7 @@ def train(Network, trainparams, netparams, simparams, input_generator):
     loss_list = []
     while loss_iter > trainparams["lossStop"] and epoch < trainparams["maxEpoch"]:
         optimizer.zero_grad()
-        [inputs, labels] = input_generator(simparams)
+        [inputs, labels, _, _] = input_generator(simparams)
         inputs = inputs.to(netparams["device"])
         labels = labels.to(netparams["device"])
         # forward pass
@@ -56,12 +56,9 @@ def train(Network, trainparams, netparams, simparams, input_generator):
     save_time = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M")
     net_name = Network._get_name()
     task_name = input_generator.__name__
-    if os.path.exists(trainparams['SaveDirectory']+'/RNN'):
-        PATH = trainparams['SaveDirectory'] + 'RNN/' + save_time + '_' + net_name + '_' + task_name + '_' + \
-               str(simparams['numTargetTrial']) + '.pth'
-        torch.save(Network.state_dict(), PATH)
-    else:
-        os.mkdir(trainparams['SaveDirectory']+'/RNN')
-        PATH = trainparams['SaveDirectory'] + 'RNN/' + save_time + '_' + net_name + '_' + task_name + '_' + \
-               str(simparams['numTargetTrial']) + '.pth'
-        torch.save(Network.state_dict(), PATH)
+    if not(os.path.exists(trainparams['SaveDirectory']+'/RNN')):
+        os.mkdir(trainparams['SaveDirectory'] + '/RNN')
+
+    PATH = trainparams['SaveDirectory'] + 'RNN/' + save_time + '_' + net_name + '_' + task_name + '_' + \
+           str(simparams['numTargetTrial']) + '.pth'
+    torch.save(Network.state_dict(), PATH)
