@@ -11,6 +11,10 @@ def test(Network, testparams, netparams, simparams, input_generator):
     Network.load_state_dict(torch.load(path))
     [inputs, targets, inputs_history, targets_history] = input_generator(simparams)
 
+    # Saving network weights
+    Weights = [weight.detach().numpy() for weight in Network.parameters()]
+    Weights = np.array(Weights)
+
     Inputs = np.zeros((inputs.size(0), testparams['numTrial']*simparams['numEpisodes'], inputs.size(2)))
     Targets = np.zeros((targets.size(0), testparams['numTrial']*simparams['numEpisodes'], targets.size(2)))
     Outputs = np.zeros((targets.size(0), testparams['numTrial']*simparams['numEpisodes'], targets.size(2)))
@@ -57,3 +61,4 @@ def test(Network, testparams, netparams, simparams, input_generator):
     np.save(save_dir_path + '/Hiddens', Hiddens)
     np.save(save_dir_path + '/Inputs_history', Inputs_history)
     np.save(save_dir_path + '/Targets_history', Targets_history)
+    np.save(save_dir_path + '/Weights', Weights)
