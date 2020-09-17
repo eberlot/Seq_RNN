@@ -73,12 +73,18 @@ def rnn_IO_gaussian_continuous(simparams):
     # Max of the length for input and output signal for final data length
     simparams.update({"trialTime":  np.maximum(input_length, output_length)})
     # Number of trials is augmented since first ones are memorized (action comes with delay)
-    n_Trial =  simparams["numTargetTrial"] + simparams["MemorySpan"]
+    n_Trial = simparams["numTargetTrial"] + simparams["MemorySpan"]
     # Zero tensors
     in_data = np.zeros((simparams["trialTime"], simparams["numEpisodes"], simparams["numTargets"]+1))
     out_data = np.zeros((simparams["trialTime"], simparams["numEpisodes"], simparams["numTargets"]))
+    # Zero tensors for history
+    inputs_history = np.zeros((simparams["numEpisodes"], n_Trial, 5))
+    targets_history = np.zeros((simparams["numEpisodes"], n_Trial, 3))
 
     seq_data = np.random.randint(simparams["minTarget"], high=simparams["maxTarget"], size=[simparams["numEpisodes"], n_Trial])
+    # Save finger numbers in history
+    inputs_history[:, :, 0] = seq_data
+    targets_history[:, :, 0] = seq_data
     for trial in range(simparams["numEpisodes"]):
         t = simparams["preTime"]
         for target in range(n_Trial):
@@ -87,12 +93,16 @@ def rnn_IO_gaussian_continuous(simparams):
             if target < simparams["MemorySpan"]:
 
                 t_inp = range(t, t + simparams["cueOn"])
+                # Save the cues in history [instruction start time,instruction end time]
+                inputs_history[trial, target, 1:3] = [t, t + simparams["cueOn"]]
                 in_data[t_inp, trial, seq_data[trial, target]] = 1
                 t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
 
             else:
                 # turn on a go cue
                 t_inp = range(t, t + simparams["cueOn"])
+                # Save the go cues in history
+                inputs_history[trial, target-simparams["MemorySpan"], 3:5] = [t, t + simparams["cueOn"]]
                 in_data[t_inp, trial, simparams["numTargets"]] = 1
                 t_t = np.maximum(t + simparams["cueOn"] + simparams["cueOff"] +simparams["RT"], simparams["forceIPI"])
                 t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
@@ -100,20 +110,25 @@ def rnn_IO_gaussian_continuous(simparams):
                 # Produce an output
                 y = gaussian()
                 t_out = range(t_t, t_t + simparams["forceWidth"])
+                # Save execution time
+                targets_history[trial, target-simparams["MemorySpan"], 1:3] = [t, t + simparams["cueOn"]]
                 previous = out_data[t_out, trial, seq_data[trial, target]]
                 out_data[t_out, trial, seq_data[trial, target-simparams["MemorySpan"]]] = np.maximum(previous, y)
 
+                # turn on a instruction cue
                 # Go for next target, except for last Memspan trials (No input is required for last ones)
                 t_inp = range(t, t + simparams["cueOn"])
                 if target < n_Trial - simparams["MemorySpan"]:
                     in_data[t_inp, trial, seq_data[trial, target]] = 1
+                    # Save instruction cue time
+                    inputs_history[trial, target, 1:3] = [t, t + simparams["cueOn"]]
                 else:
                     in_data[t_inp, trial, seq_data[trial, target]] = 0
                 t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
 
     inputs = torch.from_numpy(in_data)
     target_outputs = torch.from_numpy(out_data)
-    return inputs.float().to(simparams["device"]), target_outputs.float().to(simparams["device"]), 0,0
+    return inputs.float().to(simparams["device"]), target_outputs.float().to(simparams["device"]), inputs_history, targets_history
 
 
 
