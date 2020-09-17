@@ -78,8 +78,8 @@ def rnn_IO_gaussian_continuous(simparams):
     in_data = np.zeros((simparams["trialTime"], simparams["numEpisodes"], simparams["numTargets"]+1))
     out_data = np.zeros((simparams["trialTime"], simparams["numEpisodes"], simparams["numTargets"]))
 
+    seq_data = np.random.randint(simparams["minTarget"], high=simparams["maxTarget"], size=[simparams["numEpisodes"], n_Trial])
     for trial in range(simparams["numEpisodes"]):
-        seq_data = np.random.randint(simparams["minTarget"], high=simparams["maxTarget"], size=[1, n_Trial])
         t = simparams["preTime"]
         for target in range(n_Trial):
 
@@ -87,7 +87,7 @@ def rnn_IO_gaussian_continuous(simparams):
             if target < simparams["MemorySpan"]:
 
                 t_inp = range(t, t + simparams["cueOn"])
-                in_data[t_inp, trial, seq_data[0, target]] = 1
+                in_data[t_inp, trial, seq_data[trial, target]] = 1
                 t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
 
             else:
@@ -100,15 +100,15 @@ def rnn_IO_gaussian_continuous(simparams):
                 # Produce an output
                 y = gaussian()
                 t_out = range(t_t, t_t + simparams["forceWidth"])
-                previous = out_data[t_out, trial, seq_data[0, target]]
-                out_data[t_out, trial, seq_data[0, target-simparams["MemorySpan"]]] = np.maximum(previous, y)
+                previous = out_data[t_out, trial, seq_data[trial, target]]
+                out_data[t_out, trial, seq_data[trial, target-simparams["MemorySpan"]]] = np.maximum(previous, y)
 
                 # Go for next target, except for last Memspan trials (No input is required for last ones)
                 t_inp = range(t, t + simparams["cueOn"])
                 if target < n_Trial - simparams["MemorySpan"]:
-                    in_data[t_inp, trial, seq_data[0, target]] = 1
+                    in_data[t_inp, trial, seq_data[trial, target]] = 1
                 else:
-                    in_data[t_inp, trial, seq_data[0, target]] = 0
+                    in_data[t_inp, trial, seq_data[trial, target]] = 0
                 t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
 
     inputs = torch.from_numpy(in_data)
