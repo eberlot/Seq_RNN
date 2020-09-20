@@ -8,8 +8,9 @@ def train(Network, trainparams, netparams, simparams, input_generator):
     # here specifications for training parameters
 
     # Set loss and optimizer function
-    def criterion(outputs, labels, hidden, HiddenReg):
-        criterion = torch.mean((outputs - labels)**2) + HiddenReg*torch.norm(hidden.float())
+    def criterion(outputs, labels, hidden, HiddenReg, DerivativeRegRate, hidden_weights):
+        criterion = torch.mean((outputs - labels) ** 2) + HiddenReg * torch.sum(torch.norm(hidden, dim=-1) ** 2) + \
+                    DerivativeRegRate * torch.mean(torch.norm(torch.matmul(torch.tanh(hidden), hidden_weights.T), dim=-1))
         return criterion
 
     optimizer = torch.optim.Adam(Network.parameters(), lr=trainparams["learningRate"], weight_decay=trainparams["L2"])
@@ -26,7 +27,10 @@ def train(Network, trainparams, netparams, simparams, input_generator):
         # forward pass
         outputs, hidden = Network(inputs, netparams["batch_size"])
         # compute the loss
-        loss = criterion(outputs, labels, hidden, trainparams["HiddenRegRate"])
+        Weights = [weight for weight in Network.parameters()]
+        hidden_weights = Weights[2]
+        loss = criterion(outputs, labels, hidden, trainparams["HiddenRegRate"], trainparams["DerivativeRegRate"],
+                         hidden_weights)
         loss_iter = loss.cpu().detach().numpy()
         loss_list.append(loss_iter)
         # backpropagation
@@ -69,8 +73,9 @@ def train(Network, trainparams, netparams, simparams, input_generator):
 def train_sequential(Network, trainparams, netparams, simparams, input_generator):
     # here specifications for training parameters
     # Set loss and optimizer function
-    def criterion(outputs, labels, hidden, HiddenReg):
-        criterion = torch.mean((outputs - labels) ** 2) + HiddenReg * torch.norm(hidden.float())
+    def criterion(outputs, labels, hidden, HiddenReg, DerivativeRegRate, hidden_weights):
+        criterion = torch.mean((outputs - labels) ** 2) + HiddenReg * torch.sum(torch.norm(hidden, dim=-1)**2) + \
+                    DerivativeRegRate* torch.mean(torch.norm(torch.matmul(torch.tanh(hidden), hidden_weights.T),dim=-1))
         return criterion
 
     optimizer = torch.optim.Adam(Network.parameters(), lr=trainparams["learningRate"],
@@ -92,7 +97,9 @@ def train_sequential(Network, trainparams, netparams, simparams, input_generator
             # forward pass
             outputs, hidden = Network(inputs, netparams["batch_size"])
             # compute the loss
-            loss = criterion(outputs, labels, hidden, trainparams["HiddenRegRate"])
+            Weights = [weight for weight in Network.parameters()]
+            hidden_weights = Weights[2]
+            loss = criterion(outputs, labels, hidden, trainparams["HiddenRegRate"], trainparams["DerivativeRegRate"], hidden_weights)
             loss_iter = loss.cpu().detach().numpy()
             loss_list.append(loss_iter)
             # backpropagation
