@@ -68,10 +68,8 @@ def rnn_IO_gaussian_continuous(simparams):
     # Time for one cue even to happen
     simparams.update({"CueTime": (simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"])})
     # Total time for input and output signal
-    input_length = simparams['CueTime']*simparams["MemorySpan"] + simparams['CueTime']*2*simparams["numTargetTrial"] + simparams["preTime"]
-    output_length = input_length - 2* simparams["CueTime"] + simparams["cueOn"] + simparams["cueOff"] +simparams["RT"] + simparams["forceIPI"] + simparams["forceWidth"]
-    # Max of the length for input and output signal for final data length
-    simparams.update({"trialTime":  np.maximum(input_length, output_length)})
+    trialTime = simparams['CueTime']*simparams["MemorySpan"] + simparams['CueTime']*2*simparams["numTargetTrial"] + simparams["numTargetTrial"]*(simparams["forceWidth"] + simparams['postPress'])+simparams["preTime"]
+    simparams.update({"trialTime": trialTime})
     # Number of trials is augmented since first ones are memorized (action comes with delay)
     n_Trial = simparams["numTargetTrial"] + simparams["MemorySpan"]
     # Zero tensors
@@ -104,14 +102,14 @@ def rnn_IO_gaussian_continuous(simparams):
                 # Save the go cues in history
                 inputs_history[trial, target-simparams["MemorySpan"], 3:5] = [t, t + simparams["cueOn"]]
                 in_data[t_inp, trial, simparams["numTargets"]] = 1
-                t_t = np.maximum(t + simparams["cueOn"] + simparams["cueOff"] +simparams["RT"], simparams["forceIPI"])
-                t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"]
+                t_t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["RT"]
+                t = t + simparams["cueOn"] + simparams["cueOff"] + simparams["PostCue"] + simparams["forceWidth"] + simparams['postPress']
 
                 # Produce an output
                 y = gaussian()
                 t_out = range(t_t, t_t + simparams["forceWidth"])
                 # Save execution time
-                targets_history[trial, target-simparams["MemorySpan"], 1:3] = [t, t + simparams["cueOn"]]
+                targets_history[trial, target-simparams["MemorySpan"], 1:3] = [t_t, t_t + simparams["forceWidth"]]
                 previous = out_data[t_out, trial, seq_data[trial, target]]
                 out_data[t_out, trial, seq_data[trial, target-simparams["MemorySpan"]]] = np.maximum(previous, y)
 
