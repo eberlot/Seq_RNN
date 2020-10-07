@@ -11,7 +11,7 @@ def test(Network, testparams, netparams, simparams, input_generator):
     [inputs, targets, inputs_history, targets_history] = input_generator(simparams)
 
     # Saving network weights
-    Weights = [weight.detach().numpy() for weight in Network.parameters()]
+    Weights = [weight.cpu().detach().numpy() for weight in Network.parameters()]
     if simparams["device"] == torch.device("cuda"):
         Weights = [weight.cpu().detach().numpy() for weight in Network.parameters()]
     Weights = np.array(Weights)
